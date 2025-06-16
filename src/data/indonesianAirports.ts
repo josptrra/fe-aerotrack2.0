@@ -1,0 +1,58 @@
+import type { Airport } from "@/types/airport";
+
+export const indonesianAirports: Airport[] = [
+  {
+    id: "1",
+    name: "Soekarno-Hatta International Airport",
+    code: "CGK",
+    city: "Jakarta",
+    latitude: -6.1256,
+    longitude: 106.6558,
+    country: "Indonesia",
+  },
+  {
+    id: "2",
+    name: "Ngurah Rai International Airport",
+    code: "DPS",
+    city: "Denpasar, Bali",
+    latitude: -8.7467,
+    longitude: 115.1675,
+    country: "Indonesia",
+  },
+  {
+    id: "3",
+    name: "Juanda International Airport",
+    code: "MLG",
+    city: "Surabaya",
+    latitude: -7.3797,
+    longitude: 112.7869,
+    country: "Indonesia",
+  },
+  {
+    id: "4",
+    name: "Sultan Hasanuddin Airport",
+    code: "UPG",
+    city: "Makassar",
+    latitude: -5.0615,
+    longitude: 119.554,
+    country: "Indonesia",
+  },
+  {
+    id: "5",
+    name: "Kualanamu International Airport",
+    code: "KNO",
+    city: "Medan",
+    latitude: 3.6424,
+    longitude: 98.8853,
+    country: "Indonesia",
+  },
+  {
+    id: "6",
+    name: "Husein Sastranegara International Airport",
+    code: "BDO",
+    city: "Bandung",
+    latitude: -6.9006,
+    longitude: 107.5764,
+    country: "Indonesia",
+  },
+];
