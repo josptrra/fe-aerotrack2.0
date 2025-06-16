@@ -17,7 +17,6 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarTrigger,
 } from "@/ui/sidebar";
 import { Button } from "@/ui/button";
 
@@ -52,9 +51,9 @@ export function AppSidebar() {
     <Sidebar>
       <SidebarHeader className="border-b border-sidebar-border">
         <div className="flex items-center gap-2 px-4 py-4">
-          <SidebarTrigger />
+          {/* <SidebarTrigger /> */}
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-blue-600 rounded-lg">
+            <div className="p-2 bg-gradient-to-r from-blue-600 to-emerald-600 rounded-lg">
               <Plane className="w-5 h-5 text-white" />
             </div>
             <div>

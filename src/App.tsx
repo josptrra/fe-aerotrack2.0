@@ -8,6 +8,7 @@ import Dashboard from "./pages/Dashboard";
 import Visualization from "./pages/Visualization";
 import Export from "./pages/Export";
 import ProtectedRoute from "./components/ProtectedRoute";
+import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 
 const queryClient = new QueryClient();
 
@@ -16,6 +17,7 @@ const App = () => {
 
   return (
     <QueryClientProvider client={queryClient}>
+      <ReactQueryDevtools initialIsOpen={false} />
       <TooltipProvider>
         <Toaster />
         <Sonner />
