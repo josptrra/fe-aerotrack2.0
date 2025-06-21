@@ -9,6 +9,7 @@ import Visualization from "./pages/Visualization";
 import Export from "./pages/Export";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
+import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
@@ -57,7 +58,7 @@ const App = () => {
                 </ProtectedRoute>
               }
             />
-            <Route path="*" element={<Navigate to="/" replace />} />
+            <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
       </TooltipProvider>
