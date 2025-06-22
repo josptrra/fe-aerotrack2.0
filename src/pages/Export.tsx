@@ -215,7 +215,6 @@ export default function Export() {
   return (
     <MainLayout>
       <div className="space-y-6">
-        {/* Header */}
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold text-slate-900">Export Data</h1>
@@ -316,7 +315,7 @@ export default function Export() {
               <Button
                 onClick={handleExport}
                 disabled={isExporting || filteredFlights.length === 0}
-                className="w-full h-12 bg-gradient-to-r from-emerald-600 to-blue-600 hover:from-emerald-700 hover:to-blue-700"
+                className="w-full h-12 bg-black text-white"
               >
                 {isExporting ? (
                   <div className="flex items-center gap-2">

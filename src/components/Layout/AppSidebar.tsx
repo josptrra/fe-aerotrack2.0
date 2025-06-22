@@ -77,7 +77,12 @@ export function AppSidebar() {
 
                 return (
                   <SidebarMenuItem key={item.path}>
-                    <SidebarMenuButton asChild isActive={isActive}>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={isActive}
+                      size="lg"
+                      className="text-sm"
+                    >
                       <Link to={item.path}>
                         <Icon />
                         <span>{item.title}</span>
