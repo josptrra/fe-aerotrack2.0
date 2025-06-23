@@ -325,8 +325,8 @@ export default function Dashboard() {
         )}
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Card>
-            <CardContent className="p-6">
+          <Card className="h-28 flex justify-center">
+            <CardContent>
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-blue-100 rounded-lg">
                   <MapPin className="w-5 h-5 text-blue-600" />
@@ -341,7 +341,7 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="h-28 flex justify-center">
             <CardContent className="p-6">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-emerald-100 rounded-lg">
@@ -357,7 +357,7 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="h-28 flex justify-center">
             <CardContent className="p-6">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-purple-100 rounded-lg">
@@ -377,7 +377,7 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="h-28 flex justify-center">
             <CardContent className="p-6">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-amber-100 rounded-lg">
