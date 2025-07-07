@@ -245,6 +245,7 @@ export default function Dashboard() {
                     <div className="text-sm text-slate-600">
                       <p>Lat: {airport.latitude.toFixed(4)}</p>
                       <p>Lng: {airport.longitude.toFixed(4)}</p>
+                      <p>Bounds: </p>
                     </div>
                     {stats && (
                       <div className="pt-2 border-t border-slate-200">

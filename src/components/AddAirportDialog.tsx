@@ -150,6 +150,11 @@ const AddAirportDialog = ({ onAddAirport }: AddAirportDialogProps) => {
               onChange={(e) => handleInputChange("city", e.target.value)}
             />
           </div>
+          {/* Bounds for goods. */}
+          <div className="space-y-2">
+            <Label htmlFor="Bounds">Bounds</Label>
+            <Input id="Bounds" />
+          </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="latitude">Latitude</Label>
