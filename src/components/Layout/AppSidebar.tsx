@@ -19,6 +19,7 @@ import {
   SidebarMenuItem,
 } from "@/ui/sidebar";
 import { Button } from "@/ui/button";
+import { authService } from "@/services/authService";
 
 const menuItems = [
   {
@@ -43,21 +44,20 @@ export function AppSidebar() {
   const navigate = useNavigate();
 
   const handleLogout = () => {
-    localStorage.removeItem("isAuthenticated");
-    navigate("/");
+    authService.logout();
+    navigate("/login");
   };
 
   return (
     <Sidebar>
       <SidebarHeader className="border-b border-sidebar-border">
         <div className="flex items-center gap-2 px-4 py-4">
-          {/* <SidebarTrigger /> */}
           <div className="flex items-center gap-3">
             <div className="p-2 bg-gradient-to-r from-blue-600 to-emerald-600 rounded-lg">
               <Plane className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h2 className="font-bold text-lg">FlightTracker</h2>
+              <h2 className="font-bold text-lg">Aerotrack</h2>
               <p className="text-sm text-muted-foreground">
                 Indonesia Airports
               </p>

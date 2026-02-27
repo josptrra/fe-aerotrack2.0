@@ -12,6 +12,8 @@ import {
 } from "@/ui/card";
 import { Plane, Eye, EyeOff } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { isAxiosError } from "axios";
+import { authService } from "@/services/authService";
 
 export default function Login() {
   const [username, setUsername] = useState("");
@@ -25,23 +27,34 @@ export default function Login() {
     e.preventDefault();
     setIsLoading(true);
 
-    setTimeout(() => {
-      if (username === "admin" && password === "password") {
-        localStorage.setItem("isAuthenticated", "true");
-        toast({
-          title: "Login Berhasil",
-          description: "Selamat datang di FlightTracker Indonesia",
-        });
-        navigate("/dashboard");
-      } else {
-        toast({
-          title: "Login Gagal",
-          description: "Username atau password salah ❌",
-          variant: "default",
-        });
-      }
+    try {
+      const data = await authService.login({
+        email: username,
+        password: password,
+      });
+      localStorage.setItem("token", data.token);
+      localStorage.setItem("isAuthenticated", "true");
+
+      toast({
+        title: "Login Berhasil",
+        description: "Selamat datang di Aerotrack 2.0",
+      });
+
+      navigate("/dashboard");
+    } catch (error: unknown) {
+      const errorMessage =
+        isAxiosError(error) && error.response?.data?.error
+          ? String(error.response.data.error)
+          : "Username atau password salah ❌";
+
+      toast({
+        title: "Login Gagal",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    } finally {
       setIsLoading(false);
-    }, 1500);
+    }
   };
 
   return (
@@ -51,6 +64,7 @@ export default function Login() {
           <div className="mx-auto p-3 bg-gradient-to-r from-blue-600 to-emerald-600 rounded-full w-16 h-16 flex items-center justify-center">
             <Plane className="w-8 h-8 text-white" />
           </div>
+          <CardTitle>Aerotrack</CardTitle>
           <CardTitle>Flight Tracker Indonesia</CardTitle>
           <CardDescription>
             Sistem Monitoring Penerbangan Real-time

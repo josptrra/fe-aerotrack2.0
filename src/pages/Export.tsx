@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useEffect } from "react";
 import {
   Card,
   CardContent,
@@ -18,11 +18,11 @@ import {
 } from "@/ui/select";
 import { Checkbox } from "@/ui/checkbox";
 import MainLayout from "@/components/Layout/MainLayout";
-import {
-  FlightScrapingService,
-  type FlightData,
-  indonesianAirports,
-} from "@/services/airportService";
+import { airportService } from "@/services/airportService";
+import { flightService } from "@/services/flightService";
+import { exportService, type ExportPayload } from "@/services/exportService";
+import type { Airport } from "@/types/airport";
+
 import {
   Download,
   FileSpreadsheet,
@@ -31,125 +31,65 @@ import {
   Database,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { isAxiosError } from "axios";
 
 export default function Export() {
   const [exportFormat, setExportFormat] = useState<"csv" | "excel">("csv");
   const [selectedAirport, setSelectedAirport] = useState<string>("all");
   const [minAltitude, setMinAltitude] = useState<string>("");
   const [maxAltitude, setMaxAltitude] = useState<string>("");
+  const [airports, setAirports] = useState<Airport[]>([]);
+  const [totalDatabaseRows, setTotalDatabaseRows] = useState(0);
   const [selectedColumns, setSelectedColumns] = useState<string[]>([
-    "flightNumber",
-    "airline",
-    "departure",
-    "destination",
-    "aircraft",
-    "altitude",
-    "speed",
-    "status",
+    "flightId",
+    "callsign",
+    "lat",
+    "lon",
+    "alt",
+    "gspeed",
+    "vspeed",
     "timestamp",
   ]);
   const [isExporting, setIsExporting] = useState(false);
 
   const { toast } = useToast();
-  const scrapingService = FlightScrapingService.getInstance();
-  const allFlights = scrapingService.getFlightsFromStorage();
 
-  const filteredFlights = useMemo(() => {
-    let filtered = allFlights;
-
-    // Filter by airport
-    if (selectedAirport !== "all") {
-      filtered = filtered.filter(
-        (flight) => flight.airportCode === selectedAirport
-      );
-    }
-
-    // Filter by altitude range
-    if (minAltitude) {
-      filtered = filtered.filter(
-        (flight) => flight.altitude >= parseInt(minAltitude)
-      );
-    }
-    if (maxAltitude) {
-      filtered = filtered.filter(
-        (flight) => flight.altitude <= parseInt(maxAltitude)
-      );
-    }
-
-    return filtered;
-  }, [allFlights, selectedAirport, minAltitude, maxAltitude]);
+  useEffect(() => {
+    const loadInitialData = async () => {
+      try {
+        const [airportRes, statsRes] = await Promise.all([
+          airportService.getAirports(),
+          flightService.getStats(),
+        ]);
+        setAirports(airportRes.data);
+        setTotalDatabaseRows(statsRes.data.total_data_points);
+      } catch (err) {
+        console.error("Gagal load data export", err);
+      }
+    };
+    loadInitialData();
+  }, []);
 
   const availableColumns = [
-    { key: "flightNumber", label: "Flight Number" },
-    { key: "airline", label: "Airline" },
-    { key: "departure", label: "Departure" },
-    { key: "destination", label: "Destination" },
-    { key: "aircraft", label: "Aircraft" },
-    { key: "altitude", label: "Altitude" },
-    { key: "speed", label: "Speed" },
-    { key: "status", label: "Status" },
-    { key: "timestamp", label: "Timestamp" },
-    { key: "airportCode", label: "Airport Code" },
+    { key: "flightId", label: "Flight ID (FR24)" },
+    { key: "callsign", label: "Callsign / Flight Number" },
+    { key: "lat", label: "Latitude" },
+    { key: "lon", label: "Longitude" },
+    { key: "alt", label: "Altitude (ft)" },
+    { key: "gspeed", label: "Ground Speed (kt)" },
+    { key: "vspeed", label: "Vertical Speed" },
+    { key: "timestamp", label: "Waktu Perekaman" },
   ];
 
   const handleColumnToggle = (columnKey: string) => {
     setSelectedColumns((prev) =>
       prev.includes(columnKey)
         ? prev.filter((col) => col !== columnKey)
-        : [...prev, columnKey]
+        : [...prev, columnKey],
     );
-  };
-
-  const generateCSV = (flights: FlightData[]): string => {
-    const headers = selectedColumns.map(
-      (col) => availableColumns.find((ac) => ac.key === col)?.label || col
-    );
-
-    const csvContent = [
-      headers.join(","),
-      ...flights.map((flight) =>
-        selectedColumns
-          .map((col) => {
-            const value = flight[col as keyof FlightData];
-            // Escape commas and quotes in CSV
-            return typeof value === "string" && value.includes(",")
-              ? `"${value.replace(/"/g, '""')}"`
-              : value;
-          })
-          .join(",")
-      ),
-    ].join("\n");
-
-    return csvContent;
-  };
-
-  const downloadFile = (
-    content: string,
-    filename: string,
-    mimeType: string
-  ) => {
-    const blob = new Blob([content], { type: mimeType });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
   };
 
   const handleExport = async () => {
-    if (filteredFlights.length === 0) {
-      toast({
-        title: "Tidak Ada Data",
-        description:
-          "Tidak ada data untuk diekspor. Coba ubah filter atau lakukan scraping terlebih dahulu.",
-        variant: "destructive",
-      });
-      return;
-    }
-
     if (selectedColumns.length === 0) {
       toast({
         title: "Pilih Kolom",
@@ -162,43 +102,27 @@ export default function Export() {
     setIsExporting(true);
 
     try {
-      const timestamp = new Date()
-        .toISOString()
-        .slice(0, 19)
-        .replace(/:/g, "-");
-      const airportSuffix =
-        selectedAirport !== "all" ? `_${selectedAirport}` : "";
-      const altitudeSuffix =
-        minAltitude || maxAltitude
-          ? `_alt${minAltitude || "0"}-${maxAltitude || "max"}`
-          : "";
-
-      if (exportFormat === "csv") {
-        const csvContent = generateCSV(filteredFlights);
-        const filename = `flight_data${airportSuffix}${altitudeSuffix}_${timestamp}.csv`;
-        downloadFile(csvContent, filename, "text/csv;charset=utf-8;");
-      } else {
-        // Untuk Excel, kita buat CSV dengan header yang lebih formatted
-        const csvContent = generateCSV(filteredFlights);
-        const filename = `flight_data${airportSuffix}${altitudeSuffix}_${timestamp}.csv`;
-        downloadFile(
-          csvContent,
-          filename,
-          "application/vnd.ms-excel;charset=utf-8;"
-        );
-      }
-
+      const payload: ExportPayload = {
+        format: exportFormat,
+        airportCodes: selectedAirport === "all" ? [] : [selectedAirport],
+        minAlt: minAltitude ? parseInt(minAltitude) : 0,
+        maxAlt: maxAltitude ? parseInt(maxAltitude) : 50000,
+        columns: selectedColumns,
+      };
+      await exportService.downloadData(payload);
       toast({
         title: "Export Berhasil",
-        description: `${
-          filteredFlights.length
-        } data penerbangan berhasil diekspor dalam format ${exportFormat.toUpperCase()}`,
+        description: `Data sedang diunduh dalam format ${exportFormat.toUpperCase()}`,
       });
-    } catch (error) {
+    } catch (error: unknown) {
       console.error("Error during export:", error);
+      const message =
+        isAxiosError(error) && error.response?.data?.message
+          ? String(error.response.data.message)
+          : "Terjadi kesalahan saat mengekspor data";
       toast({
         title: "Export Gagal",
-        description: "Terjadi kesalahan saat mengekspor data",
+        description: message,
         variant: "destructive",
       });
     } finally {
@@ -225,7 +149,7 @@ export default function Export() {
           <div className="flex items-center gap-2">
             <Database className="w-6 h-6 text-emerald-600" />
             <span className="text-sm text-slate-600">
-              {filteredFlights.length} data siap ekspor
+              {totalDatabaseRows} data tersedia di database
             </span>
           </div>
         </div>
@@ -243,7 +167,6 @@ export default function Export() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              {/* Export Format */}
               <div className="space-y-3">
                 <Label className="text-base font-medium">Format Export</Label>
                 <div className="grid grid-cols-2 gap-3">
@@ -261,17 +184,16 @@ export default function Export() {
                     className="justify-start"
                   >
                     <FileSpreadsheet className="w-4 h-4 mr-2" />
-                    Excel
+                    Excel (XLSX)
                   </Button>
                 </div>
               </div>
 
-              {/* Column Selection */}
               <div className="space-y-3">
                 <Label className="text-base font-medium">
                   Kolom yang Diekspor
                 </Label>
-                <div className="grid grid-cols-1 gap-2 max-h-48 overflow-y-auto">
+                <div className="grid grid-cols-1 gap-2 max-h-48 overflow-y-auto border rounded-md p-3">
                   {availableColumns.map((column) => (
                     <div
                       key={column.key}
@@ -311,16 +233,15 @@ export default function Export() {
                 </div>
               </div>
 
-              {/* Export Button */}
               <Button
                 onClick={handleExport}
-                disabled={isExporting || filteredFlights.length === 0}
-                className="w-full h-12 bg-black text-white"
+                disabled={isExporting}
+                className="w-full h-12 bg-black text-white hover:bg-slate-800"
               >
                 {isExporting ? (
                   <div className="flex items-center gap-2">
                     <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    Mengekspor...
+                    Memproses File...
                   </div>
                 ) : (
                   <div className="flex items-center gap-2">
@@ -342,19 +263,18 @@ export default function Export() {
               <CardDescription>Filter data sebelum ekspor</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {/* Airport Filter */}
               <div className="space-y-2">
-                <Label>Bandara</Label>
+                <Label>Pilih Bandara</Label>
                 <Select
                   value={selectedAirport}
                   onValueChange={setSelectedAirport}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Pilih bandara" />
+                    <SelectValue placeholder="Semua Bandara" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Semua Bandara</SelectItem>
-                    {indonesianAirports.map((airport) => (
+                    {airports.map((airport) => (
                       <SelectItem key={airport.code} value={airport.code}>
                         {airport.code} - {airport.city}
                       </SelectItem>
@@ -363,14 +283,13 @@ export default function Export() {
                 </Select>
               </div>
 
-              {/* Altitude Range */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="minAltitudeExport">Min Altitude (ft)</Label>
                   <Input
                     id="minAltitudeExport"
                     type="number"
-                    placeholder="e.g. 5000"
+                    placeholder="0"
                     value={minAltitude}
                     onChange={(e) => setMinAltitude(e.target.value)}
                   />
@@ -380,7 +299,7 @@ export default function Export() {
                   <Input
                     id="maxAltitudeExport"
                     type="number"
-                    placeholder="e.g. 40000"
+                    placeholder="50000"
                     value={maxAltitude}
                     onChange={(e) => setMaxAltitude(e.target.value)}
                   />
@@ -395,73 +314,34 @@ export default function Export() {
                 Reset Filter
               </Button>
 
-              {/* Preview Data Count */}
-              <div className="mt-6 p-4 bg-slate-50 rounded-lg">
+              <div className="mt-6 p-4 bg-slate-50 rounded-lg border border-slate-200">
                 <h4 className="font-medium text-slate-900 mb-2">
-                  Preview Export
+                  Ringkasan Konfigurasi
                 </h4>
                 <div className="text-sm text-slate-600 space-y-1">
                   <p>
-                    Total data: <strong>{filteredFlights.length}</strong>
-                  </p>
-                  <p>
-                    Kolom: <strong>{selectedColumns.length}</strong>
-                  </p>
-                  <p>
                     Format: <strong>{exportFormat.toUpperCase()}</strong>
                   </p>
-                  {selectedAirport !== "all" && (
-                    <p>
-                      Bandara: <strong>{selectedAirport}</strong>
-                    </p>
-                  )}
-                  {(minAltitude || maxAltitude) && (
-                    <p>
-                      Altitude:{" "}
-                      <strong>
-                        {minAltitude || "0"} - {maxAltitude || "∞"} ft
-                      </strong>
-                    </p>
-                  )}
+                  <p>
+                    Kolom terpilih: <strong>{selectedColumns.length}</strong>
+                  </p>
+                  <p>
+                    Filter Bandara:{" "}
+                    <strong>
+                      {selectedAirport === "all" ? "Semua" : selectedAirport}
+                    </strong>
+                  </p>
+                  <p>
+                    Rentang Altitude:{" "}
+                    <strong>
+                      {minAltitude || "0"} - {maxAltitude || "50000"} ft
+                    </strong>
+                  </p>
                 </div>
               </div>
             </CardContent>
           </Card>
         </div>
-
-        {/* Recent Exports Info */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Informasi Export</CardTitle>
-            <CardDescription>
-              Tips dan informasi tentang fitur export
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <h4 className="font-medium text-slate-900 mb-2">Format CSV</h4>
-                <ul className="text-sm text-slate-600 space-y-1">
-                  <li>• Kompatibel dengan Excel, Google Sheets</li>
-                  <li>• Ukuran file lebih kecil</li>
-                  <li>• Mudah dibaca oleh aplikasi lain</li>
-                  <li>• Encoding UTF-8 untuk karakter Indonesia</li>
-                </ul>
-              </div>
-              <div>
-                <h4 className="font-medium text-slate-900 mb-2">
-                  Filter Altitude
-                </h4>
-                <ul className="text-sm text-slate-600 space-y-1">
-                  <li>• Filter berdasarkan rentang ketinggian</li>
-                  <li>• Berguna untuk analisis rute komersial vs privat</li>
-                  <li>• Kosongkan untuk semua altitude</li>
-                  <li>• Satuan dalam feet (ft)</li>
-                </ul>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
       </div>
     </MainLayout>
   );

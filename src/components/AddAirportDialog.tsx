@@ -13,24 +13,30 @@ import { Input } from "@/ui/input";
 import { Label } from "@/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import type { Airport } from "@/types/airport";
+import { isAxiosError } from "axios";
+import { airportService } from "@/services/airportService";
 
 interface AddAirportDialogProps {
-  onAddAirport: (airport: Airport) => void;
+  onAddAirport: () => void;
 }
 
 const AddAirportDialog = ({ onAddAirport }: AddAirportDialogProps) => {
   const [open, setOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(false); // Tambah loading state
   const [formData, setFormData] = useState({
     name: "",
     code: "",
     city: "",
     latitude: "",
     longitude: "",
+    bounds: "", // Tambahkan bounds
   });
   const { toast } = useToast();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
+    // Buat jadi async
     e.preventDefault();
+    setIsLoading(true);
 
     // Validation
     if (
@@ -38,64 +44,62 @@ const AddAirportDialog = ({ onAddAirport }: AddAirportDialogProps) => {
       !formData.code ||
       !formData.city ||
       !formData.latitude ||
-      !formData.longitude
+      !formData.longitude ||
+      !formData.bounds // Validasi bounds
     ) {
       toast({
         title: "Error",
-        description: "Semua field harus diisi",
+        description: "Semua field harus diisi termasuk Bounds",
         variant: "destructive",
       });
-      return;
-    }
-
-    if (formData.code.length !== 3) {
-      toast({
-        title: "Error",
-        description: "Kode bandara harus 3 karakter",
-        variant: "destructive",
-      });
+      setIsLoading(false);
       return;
     }
 
     const lat = parseFloat(formData.latitude);
     const lng = parseFloat(formData.longitude);
 
-    if (isNaN(lat) || isNaN(lng)) {
+    try {
+      const newAirportData: Airport = {
+        name: formData.name,
+        code: formData.code.toUpperCase(),
+        city: formData.city,
+        lat: lat,
+        lon: lng,
+        bounds: formData.bounds,
+      };
+
+      await airportService.createAirport(newAirportData);
+
+      onAddAirport();
+
+      setFormData({
+        name: "",
+        code: "",
+        city: "",
+        latitude: "",
+        longitude: "",
+        bounds: "",
+      });
+      setOpen(false);
+
       toast({
-        title: "Error",
-        description: "Latitude dan longitude harus berupa angka",
+        title: "Berhasil",
+        description: `Bandara ${newAirportData.name} telah tersimpan di database`,
+      });
+    } catch (error: unknown) {
+      const message =
+        isAxiosError(error) && error.response?.data?.error
+          ? String(error.response.data.error)
+          : "Terjadi kesalahan server";
+      toast({
+        title: "Gagal Simpan",
+        description: message,
         variant: "destructive",
       });
-      return;
+    } finally {
+      setIsLoading(false);
     }
-
-    const newAirport: Airport = {
-      id: Date.now().toString(),
-      name: formData.name,
-      code: formData.code.toUpperCase(),
-      city: formData.city,
-      latitude: lat,
-      longitude: lng,
-      country: "Indonesia",
-    };
-
-    onAddAirport(newAirport);
-
-    // Reset form
-    setFormData({
-      name: "",
-      code: "",
-      city: "",
-      latitude: "",
-      longitude: "",
-    });
-
-    setOpen(false);
-
-    toast({
-      title: "Berhasil",
-      description: `Bandara ${newAirport.name} telah ditambahkan`,
-    });
   };
 
   const handleInputChange = (field: string, value: string) => {
@@ -130,50 +134,56 @@ const AddAirportDialog = ({ onAddAirport }: AddAirportDialogProps) => {
               onChange={(e) => handleInputChange("name", e.target.value)}
             />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="code">Kode Bandara (3 huruf)</Label>
-            <Input
-              id="code"
-              placeholder="contoh: CGK"
-              maxLength={3}
-              value={formData.code}
-              onChange={(e) => handleInputChange("code", e.target.value)}
-              style={{ textTransform: "uppercase" }}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="city">Kota</Label>
-            <Input
-              id="city"
-              placeholder="contoh: Jakarta"
-              value={formData.city}
-              onChange={(e) => handleInputChange("city", e.target.value)}
-            />
-          </div>
-          {/* Bounds for goods. */}
-          <div className="space-y-2">
-            <Label htmlFor="Bounds">Bounds</Label>
-            <Input id="Bounds" />
-          </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="latitude">Latitude</Label>
+              <Label htmlFor="code">Kode (3 huruf)</Label>
+              <Input
+                id="code"
+                placeholder="CGK"
+                maxLength={3}
+                value={formData.code}
+                onChange={(e) => handleInputChange("code", e.target.value)}
+                className="uppercase"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="city">Kota</Label>
+              <Input
+                id="city"
+                placeholder="Jakarta"
+                value={formData.city}
+                onChange={(e) => handleInputChange("city", e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="bounds">Bounds (N, S, W, E)</Label>
+            <Input
+              id="bounds"
+              placeholder="0.66, 0.26, 101.24, 101.64"
+              value={formData.bounds}
+              onChange={(e) => handleInputChange("bounds", e.target.value)}
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="latitude">Latitude Tengah</Label>
               <Input
                 id="latitude"
                 type="number"
                 step="any"
-                placeholder="contoh: -6.1256"
                 value={formData.latitude}
                 onChange={(e) => handleInputChange("latitude", e.target.value)}
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="longitude">Longitude</Label>
+              <Label htmlFor="longitude">Longitude Tengah</Label>
               <Input
                 id="longitude"
                 type="number"
                 step="any"
-                placeholder="contoh: 106.6558"
                 value={formData.longitude}
                 onChange={(e) => handleInputChange("longitude", e.target.value)}
               />
@@ -187,7 +197,9 @@ const AddAirportDialog = ({ onAddAirport }: AddAirportDialogProps) => {
             >
               Batal
             </Button>
-            <Button type="submit">Tambah Bandara</Button>
+            <Button type="submit" disabled={isLoading}>
+              {isLoading ? "Menyimpan..." : "Tambah Bandara"}
+            </Button>
           </div>
         </form>
       </DialogContent>

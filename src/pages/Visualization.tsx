@@ -14,14 +14,13 @@ import {
   SelectValue,
 } from "@/ui/select";
 import { Badge } from "@/ui/badge";
-// import { Progress } from "@/ui/progress";
 import MainLayout from "@/components/Layout/MainLayout";
-import {
-  FlightScrapingService,
-  // type FlightData,
-  indonesianAirports,
-  type ScrapingStats,
-} from "@/services/airportService";
+
+import { airportService } from "@/services/airportService";
+import { flightService } from "@/services/flightService";
+import type { Airport } from "@/types/airport";
+import type { FlightStats, TrackingStatus } from "@/types/flight";
+
 import { BarChart, Plane, Clock, Activity, TrendingUp } from "lucide-react";
 import {
   BarChart as RechartsBarChart,
@@ -38,95 +37,65 @@ import {
 
 export default function Visualization() {
   const [selectedAirport, setSelectedAirport] = useState<string>("all");
-  const [scrapingStats, setScrapingStats] = useState<ScrapingStats[]>([]);
-  // const [realtimeData, setRealtimeData] = useState<FlightData[]>([]);
+  const [airports, setAirports] = useState<Airport[]>([]);
+  const [visualizationData, setVisualizationData] = useState<FlightStats[]>([]);
+  const [trackingStatus, setTrackingStatus] = useState<TrackingStatus>({
+    isTracking: false,
+    activeBounds: "",
+  });
 
-  const scrapingService = FlightScrapingService.getInstance();
-  const allFlights = scrapingService.getFlightsFromStorage();
+  const loadData = async () => {
+    try {
+      const [airportRes, vizRes, statusRes] = await Promise.all([
+        airportService.getAirports(),
+        flightService.getVisualization(),
+        flightService.getTrackingStatus(),
+      ]);
+
+      setAirports(airportRes.data);
+      setVisualizationData(vizRes.data);
+      setTrackingStatus(statusRes.data);
+    } catch (error) {
+      console.error("Gagal memuat data visualisasi", error);
+    }
+  };
 
   useEffect(() => {
-    // Setup real-time updates
-    // scrapingService.setDataCallback((newData) => {
-    //   setRealtimeData((prev) => [...prev, ...newData]);
-    // });
+    loadData();
 
-    scrapingService.setStatsCallback((stats) => {
-      setScrapingStats((prev) => {
-        const newStats = [...prev];
-        const existingIndex = newStats.findIndex(
-          (s) => s.airportCode === stats.airportCode
-        );
-        if (existingIndex >= 0) {
-          newStats[existingIndex] = stats;
-        } else {
-          newStats.push(stats);
-        }
-        return newStats;
-      });
-    });
-
-    // Load initial stats
-    setScrapingStats(scrapingService.getScrapingStats());
-
-    // Refresh stats every 5 seconds
     const interval = setInterval(() => {
-      setScrapingStats(scrapingService.getScrapingStats());
-    }, 5000);
+      loadData();
+    }, 10000);
 
     return () => clearInterval(interval);
   }, []);
 
-  const airportDataStats = useMemo(() => {
-    return indonesianAirports.map((airport) => {
-      const airportFlights = allFlights.filter(
-        (flight) => flight.airportCode === airport.code
-      );
-      const stats = scrapingStats.find((s) => s.airportCode === airport.code);
-
-      return {
-        code: airport.code,
-        name: airport.name,
-        city: airport.city,
-        totalFlights: airportFlights.length,
-        lastUpdate: stats?.lastUpdate || "",
-        isActive: stats?.isActive || false,
-        avgAltitude:
-          airportFlights.length > 0
-            ? Math.round(
-                airportFlights.reduce((sum, f) => sum + f.altitude, 0) /
-                  airportFlights.length
-              )
-            : 0,
-        avgSpeed:
-          airportFlights.length > 0
-            ? Math.round(
-                airportFlights.reduce((sum, f) => sum + f.speed, 0) /
-                  airportFlights.length
-              )
-            : 0,
-        airlines: new Set(airportFlights.map((f) => f.airline)).size,
-      };
-    });
-  }, [allFlights, scrapingStats]);
-
   const filteredStats = useMemo(() => {
     if (selectedAirport === "all") {
-      return airportDataStats;
+      return visualizationData;
     }
-    return airportDataStats.filter((stat) => stat.code === selectedAirport);
-  }, [airportDataStats, selectedAirport]);
+    return visualizationData.filter((stat) => stat.code === selectedAirport);
+  }, [visualizationData, selectedAirport]);
 
   const chartData = useMemo(() => {
-    return airportDataStats.map((stat) => ({
+    return visualizationData.map((stat) => ({
       airport: stat.code,
-      flights: stat.totalFlights,
-      airlines: stat.airlines,
+      flights: stat.total_data,
+      airlines: stat.total_airlines,
     }));
-  }, [airportDataStats]);
+  }, [visualizationData]);
 
-  const totalFlights = allFlights.length;
-  const activeAirports = scrapingStats.filter((s) => s.isActive).length;
-  const currentActiveAirport = scrapingService.getCurrentActiveAirport();
+  const totalFlights = visualizationData.reduce(
+    (sum, item) => sum + item.total_data,
+    0,
+  );
+
+  const currentActiveAirportCode = useMemo(() => {
+    const active = airports.find(
+      (a) => a.bounds === trackingStatus.activeBounds,
+    );
+    return active ? active.code : null;
+  }, [airports, trackingStatus]);
 
   const COLORS = [
     "#3B82F6",
@@ -179,7 +148,7 @@ export default function Visualization() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Semua Bandara</SelectItem>
-                    {indonesianAirports.map((airport) => (
+                    {airports.map((airport) => (
                       <SelectItem key={airport.code} value={airport.code}>
                         {airport.code} - {airport.city}
                       </SelectItem>
@@ -187,13 +156,13 @@ export default function Visualization() {
                   </SelectContent>
                 </Select>
               </div>
-              {currentActiveAirport && (
+              {trackingStatus.isTracking && currentActiveAirportCode && (
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Status Scraping</label>
                   <div className="flex items-center gap-2 p-2 bg-green-50 border border-green-200 rounded-md">
                     <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
                     <span className="text-sm text-green-700">
-                      Aktif: {currentActiveAirport}
+                      Aktif: {currentActiveAirportCode}
                     </span>
                   </div>
                 </div>
@@ -204,7 +173,6 @@ export default function Visualization() {
 
         {/* Charts */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Bar Chart - Data per Bandara */}
           <Card>
             <CardHeader>
               <CardTitle>Data Penerbangan per Bandara</CardTitle>
@@ -221,7 +189,7 @@ export default function Visualization() {
                   <Tooltip
                     formatter={(value, name) => [
                       value,
-                      name === "flights" ? "Penerbangan" : "Maskapai",
+                      name === "flights" ? "Data Point" : "Maskapai",
                     ]}
                     labelFormatter={(label) => `Bandara: ${label}`}
                   />
@@ -231,7 +199,6 @@ export default function Visualization() {
             </CardContent>
           </Card>
 
-          {/* Pie Chart - Distribusi Data */}
           <Card>
             <CardHeader>
               <CardTitle>Distribusi Data</CardTitle>
@@ -254,14 +221,14 @@ export default function Visualization() {
                     fill="#8884d8"
                     dataKey="flights"
                   >
-                    {chartData.map((entry, index) => (
+                    {chartData.map((_entry, index) => (
                       <Cell
                         key={`cell-${index}`}
                         fill={COLORS[index % COLORS.length]}
                       />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(value) => [value, "Penerbangan"]} />
+                  <Tooltip formatter={(value) => [value, "Data Point"]} />
                 </PieChart>
               </ResponsiveContainer>
             </CardContent>
@@ -270,91 +237,60 @@ export default function Visualization() {
 
         {/* Airport Statistics Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredStats.map((stat) => (
-            <Card
-              key={stat.code}
-              className={
-                stat.isActive ? "ring-2 ring-green-500 bg-green-50" : ""
-              }
-            >
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <Badge
-                    variant="secondary"
-                    className={
-                      stat.isActive
-                        ? "bg-green-100 text-green-700"
-                        : "bg-blue-100 text-blue-700"
-                    }
-                  >
-                    {stat.code}
-                  </Badge>
-                  {stat.isActive && (
-                    <div className="flex items-center gap-1">
-                      <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                      <span className="text-xs text-green-600">Aktif</span>
+          {filteredStats.map((stat) => {
+            const isActive =
+              trackingStatus.isTracking &&
+              trackingStatus.activeBounds.includes(stat.code); // Logika sederhana
+            return (
+              <Card
+                key={stat.code}
+                className={isActive ? "ring-2 ring-green-500 bg-green-50" : ""}
+              >
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <Badge
+                      variant="secondary"
+                      className={
+                        isActive
+                          ? "bg-green-100 text-green-700"
+                          : "bg-blue-100 text-blue-700"
+                      }
+                    >
+                      {stat.code}
+                    </Badge>
+                  </div>
+                  <CardTitle className="text-lg">{stat.airport}</CardTitle>
+                  <CardDescription>{stat.city}</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <p className="text-slate-600">Total Data</p>
+                      <p className="text-2xl font-bold text-blue-600">
+                        {stat.total_data}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-slate-600">Maskapai</p>
+                      <p className="text-2xl font-bold text-emerald-600">
+                        {stat.total_airlines}
+                      </p>
+                    </div>
+                  </div>
+                  {stat.last_update && (
+                    <div className="flex items-center gap-1 text-xs text-slate-500 pt-2 border-t border-slate-200">
+                      <Clock className="w-3 h-3" />
+                      Update:{" "}
+                      {new Date(stat.last_update).toLocaleString("id-ID")}
                     </div>
                   )}
-                </div>
-                <CardTitle className="text-lg">{stat.name}</CardTitle>
-                <CardDescription>{stat.city}</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <p className="text-slate-600">Total Data</p>
-                    <p className="text-2xl font-bold text-blue-600">
-                      {stat.totalFlights}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-slate-600">Maskapai</p>
-                    <p className="text-2xl font-bold text-emerald-600">
-                      {stat.airlines}
-                    </p>
-                  </div>
-                </div>
-
-                {/* {stat.totalFlights > 0 && (
-                  <>
-                    <div className="space-y-2">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-slate-600">Avg Altitude</span>
-                        <span className="font-medium">
-                          {stat.avgAltitude.toLocaleString()} ft
-                        </span>
-                      </div>
-                      <Progress
-                        value={Math.min((stat.avgAltitude / 40000) * 100, 100)}
-                        className="h-2"
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-slate-600">Avg Speed</span>
-                        <span className="font-medium">{stat.avgSpeed} kt</span>
-                      </div>
-                      <Progress
-                        value={Math.min((stat.avgSpeed / 800) * 100, 100)}
-                        className="h-2"
-                      />
-                    </div>
-                  </>
-                )} */}
-
-                {stat.lastUpdate && (
-                  <div className="flex items-center gap-1 text-xs text-slate-500 pt-2 border-t border-slate-200">
-                    <Clock className="w-3 h-3" />
-                    Update: {new Date(stat.lastUpdate).toLocaleString("id-ID")}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          ))}
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
 
-        {/* Summary Stats */}
+        {/* Summary Stats Footer */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <Card>
             <CardContent className="p-6">
@@ -363,7 +299,7 @@ export default function Visualization() {
                   <Plane className="w-5 h-5 text-blue-600" />
                 </div>
                 <div>
-                  <p className="text-sm text-slate-600">Total Penerbangan</p>
+                  <p className="text-sm text-slate-600">Total Data</p>
                   <p className="text-2xl font-bold text-blue-600">
                     {totalFlights}
                   </p>
@@ -371,7 +307,6 @@ export default function Visualization() {
               </div>
             </CardContent>
           </Card>
-
           <Card>
             <CardContent className="p-6">
               <div className="flex items-center gap-3">
@@ -381,13 +316,12 @@ export default function Visualization() {
                 <div>
                   <p className="text-sm text-slate-600">Bandara Aktif</p>
                   <p className="text-2xl font-bold text-emerald-600">
-                    {activeAirports}
+                    {trackingStatus.isTracking ? 1 : 0}
                   </p>
                 </div>
               </div>
             </CardContent>
           </Card>
-
           <Card>
             <CardContent className="p-6">
               <div className="flex items-center gap-3">
@@ -397,13 +331,12 @@ export default function Visualization() {
                 <div>
                   <p className="text-sm text-slate-600">Bandara Terdaftar</p>
                   <p className="text-2xl font-bold text-purple-600">
-                    {indonesianAirports.length}
+                    {airports.length}
                   </p>
                 </div>
               </div>
             </CardContent>
           </Card>
-
           <Card>
             <CardContent className="p-6">
               <div className="flex items-center gap-3">
@@ -413,11 +346,9 @@ export default function Visualization() {
                 <div>
                   <p className="text-sm text-slate-600">Status Sistem</p>
                   <p
-                    className={`text-lg font-semibold ${
-                      activeAirports > 0 ? "text-green-600" : "text-slate-600"
-                    }`}
+                    className={`text-lg font-semibold ${trackingStatus.isTracking ? "text-green-600" : "text-slate-600"}`}
                   >
-                    {activeAirports > 0 ? "Aktif" : "Standby"}
+                    {trackingStatus.isTracking ? "Aktif" : "Standby"}
                   </p>
                 </div>
               </div>

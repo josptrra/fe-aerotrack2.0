@@ -8,32 +8,22 @@ import Dashboard from "./pages/Dashboard";
 import Visualization from "./pages/Visualization";
 import Export from "./pages/Export";
 import ProtectedRoute from "./components/ProtectedRoute";
-import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
 const App = () => {
-  const isAuthenticated = localStorage.getItem("isAuthenticated") === "true";
-
   return (
     <QueryClientProvider client={queryClient}>
-      <ReactQueryDevtools initialIsOpen={false} />
       <TooltipProvider>
         <Toaster />
         <Sonner />
         <BrowserRouter>
           <Routes>
-            <Route
-              path="/"
-              element={
-                isAuthenticated ? (
-                  <Navigate to="/dashboard" replace />
-                ) : (
-                  <Login />
-                )
-              }
-            />
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+
+            <Route path="/login" element={<Login />} />
+
             <Route
               path="/dashboard"
               element={

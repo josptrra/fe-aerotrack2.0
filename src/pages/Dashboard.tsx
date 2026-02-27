@@ -7,18 +7,15 @@ import {
   CardTitle,
 } from "@/ui/card";
 import { Button } from "@/ui/button";
-// import { Input } from "@/ui/input";
-// import { Label } from "@/ui/label";
 import { Badge } from "@/ui/badge";
 import { Alert, AlertDescription } from "@/ui/alert";
 import MainLayout from "@/components/Layout/MainLayout";
 import AddAirportDialog from "@/components/AddAirportDialog";
-import {
-  indonesianAirports as defaultAirports,
-  FlightScrapingService,
-  type Airport,
-  type ScrapingStats,
-} from "@/services/airportService";
+import { airportService } from "@/services/airportService";
+import { flightService } from "@/services/flightService";
+import type { Airport } from "@/types/airport";
+import type { DashboardSummary, TrackingStatus } from "@/types/flight";
+
 import {
   MapPin,
   Plane,
@@ -29,87 +26,81 @@ import {
   Clock,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { isAxiosError } from "axios";
 
 export default function Dashboard() {
-  const [airports, setAirports] = useState<Airport[]>(defaultAirports);
+  const [airports, setAirports] = useState<Airport[]>([]);
   const [selectedAirport, setSelectedAirport] = useState<Airport | null>(null);
-  const [isScrapingActive, setIsScrapingActive] = useState(false);
-  const [currentActiveAirport, setCurrentActiveAirport] = useState<
-    string | null
-  >(null);
-  const [scrapingStats, setScrapingStats] = useState<ScrapingStats[]>([]);
-  // const [apiKey, setApiKey] = useState<string>("");
+  const [trackingStatus, setTrackingStatus] = useState<TrackingStatus>({
+    isTracking: false,
+    activeBounds: "",
+  });
+  const [summary, setSummary] = useState<DashboardSummary>({
+    total_airports: 0,
+    total_flights: 0,
+    total_data_points: 0,
+  });
   const [lastUpdate, setLastUpdate] = useState<string>("");
   const { toast } = useToast();
 
-  const scrapingService = FlightScrapingService.getInstance();
+  // 1. Load Data Awal (Daftar Bandara & Summary)
+  const loadInitialData = async () => {
+    try {
+      const airportRes = await airportService.getAirports();
+      const summaryRes = await flightService.getStats();
+      const statusRes = await flightService.getTrackingStatus();
+
+      setAirports(airportRes.data);
+      setSummary(summaryRes.data);
+      setTrackingStatus(statusRes.data);
+    } catch (error) {
+      console.error("Gagal memuat data dashboard", error);
+    }
+  };
 
   useEffect(() => {
-    // Setup callbacks
-    scrapingService.setStatsCallback((stats) => {
-      setScrapingStats((prev) => {
-        const newStats = [...prev];
-        const existingIndex = newStats.findIndex(
-          (s) => s.airportCode === stats.airportCode
-        );
-        if (existingIndex >= 0) {
-          newStats[existingIndex] = stats;
-        } else {
-          newStats.push(stats);
-        }
-        return newStats;
-      });
-    });
+    loadInitialData();
 
-    scrapingService.setDataCallback(() => {
-      setLastUpdate(new Date().toLocaleTimeString("id-ID"));
-    });
+    // Polling setiap 10 detik untuk update angka statistik (Total Data)
+    const interval = setInterval(async () => {
+      try {
+        const summaryRes = await flightService.getStats();
+        const statusRes = await flightService.getTrackingStatus();
+        setSummary(summaryRes.data);
+        setTrackingStatus(statusRes.data);
+        setLastUpdate(new Date().toLocaleTimeString("id-ID"));
+      } catch (err) {
+        console.error("Polling error", err);
+      }
+    }, 10000);
 
-    setScrapingStats(scrapingService.getScrapingStats());
-    setCurrentActiveAirport(scrapingService.getCurrentActiveAirport());
-    setIsScrapingActive(scrapingService.isCurrentlyScrapingForAirport());
-
-    return () => {};
+    return () => clearInterval(interval);
   }, []);
-
-  const handleAddAirport = (newAirport: Airport) => {
-    const existingAirport = airports.find(
-      (airport) => airport.code === newAirport.code
-    );
-    if (existingAirport) {
-      toast({
-        title: "Error",
-        description: `Bandara dengan kode ${newAirport.code} sudah ada`,
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setAirports((prev) => [...prev, newAirport]);
-  };
 
   const handleStartScraping = async () => {
     if (!selectedAirport) return;
 
     try {
-      // await scrapingService.startContinuousScraping(
-      //   selectedAirport.code,
-      //   apiKey || undefined
-      // );
-      // comment dulu sementara, karena api key belum ada
-      await scrapingService.startContinuousScraping(selectedAirport.code);
-      setIsScrapingActive(true);
-      setCurrentActiveAirport(selectedAirport.code);
+      // kirim bounds bandara yang dipilih ke backend
+      await flightService.startTracking(selectedAirport.bounds);
+
+      setTrackingStatus({
+        isTracking: true,
+        activeBounds: selectedAirport.bounds,
+      });
 
       toast({
         title: "Scraping Dimulai",
-        description: `Scraping berkelanjutan untuk ${selectedAirport.name} telah dimulai`,
+        description: `Tracking real-time untuk ${selectedAirport.name} aktif.`,
       });
-    } catch (error) {
+    } catch (error: unknown) {
+      const message =
+        isAxiosError(error) && error.response?.data?.error
+          ? String(error.response.data.error)
+          : "Terjadi kesalahan";
       toast({
-        title: "Gagal Memulai Scraping",
-        description:
-          error instanceof Error ? error.message : "Terjadi kesalahan",
+        title: "Gagal Memulai",
+        description: message,
         variant: "destructive",
       });
     }
@@ -117,27 +108,38 @@ export default function Dashboard() {
 
   const handleStopScraping = async () => {
     try {
-      await scrapingService.stopScraping();
-      setIsScrapingActive(false);
-      setCurrentActiveAirport(null);
+      await flightService.stopTracking();
+      setTrackingStatus({
+        isTracking: false,
+        activeBounds: "",
+      });
 
       toast({
         title: "Scraping Dihentikan",
-        description: "Scraping data telah dihentikan",
+        description: "Sistem kembali ke mode idle.",
       });
-    } catch (error) {
+    } catch (error: unknown) {
+      const message =
+        isAxiosError(error) && error.response?.data?.error
+          ? String(error.response.data.error)
+          : "Terjadi kesalahan";
       toast({
-        title: "Gagal Menghentikan Scraping",
-        description:
-          error instanceof Error ? error.message : "Terjadi kesalahan",
+        title: "Gagal Menghentikan",
+        description: message,
         variant: "destructive",
       });
     }
   };
 
-  const getAirportStats = (airportCode: string) => {
-    return scrapingStats.find((s) => s.airportCode === airportCode);
+  // helper buat cari bandara mana yang sedang aktif berdasarkan bounds
+  const getActiveAirportName = () => {
+    const active = airports.find(
+      (a) => a.bounds === trackingStatus.activeBounds,
+    );
+    return active ? active.code : null;
   };
+
+  const currentActiveAirportCode = getActiveAirportName();
 
   return (
     <MainLayout>
@@ -150,7 +152,7 @@ export default function Dashboard() {
             </p>
           </div>
           <div className="flex items-center gap-4">
-            {isScrapingActive && (
+            {trackingStatus.isTracking && (
               <div className="flex items-center gap-2 px-3 py-1 bg-green-100 text-green-700 rounded-full">
                 <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
                 <span className="text-sm font-medium">Scraping Aktif</span>
@@ -162,52 +164,28 @@ export default function Dashboard() {
                 {airports.length} Bandara
               </span>
             </div>
-            <AddAirportDialog onAddAirport={handleAddAirport} />
+            <AddAirportDialog
+              onAddAirport={() => {
+                loadInitialData(); // Paksa Dashboard buat narik data terbaru dari API (biar ga blank)
+              }}
+            />
           </div>
         </div>
 
-        {/* API Key Configuration */}
-        {/* <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <AlertCircle className="w-5 h-5 text-amber-600" />
-              Konfigurasi API
-            </CardTitle>
-            <CardDescription>
-              Masukkan API key Flightradar24 untuk data real-time (opsional -
-              akan menggunakan simulasi jika kosong)
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              <Label htmlFor="apiKey">Flightradar24 API Key</Label>
-              <Input
-                id="apiKey"
-                type="password"
-                placeholder="Masukkan API key (opsional)"
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                disabled={isScrapingActive}
-              />
-            </div>
-          </CardContent>
-        </Card> */}
-
-        {isScrapingActive && currentActiveAirport && (
+        {trackingStatus.isTracking && currentActiveAirportCode && (
           <Alert className="border-green-200 bg-green-50">
             <AlertCircle className="h-4 w-4 text-green-600" />
             <AlertDescription className="text-green-700">
               Scraping aktif untuk bandara{" "}
-              <strong>{currentActiveAirport}</strong>.
-              {lastUpdate && ` Update terakhir: ${lastUpdate}`}
+              <strong>{currentActiveAirportCode}</strong>.
+              {lastUpdate && ` Update data terakhir: ${lastUpdate}`}
             </AlertDescription>
           </Alert>
         )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {airports.map((airport) => {
-            const stats = getAirportStats(airport.code);
-            const isActive = currentActiveAirport === airport.code;
+            const isActive = trackingStatus.activeBounds === airport.bounds;
             const isSelected = selectedAirport?.id === airport.id;
 
             return (
@@ -216,7 +194,9 @@ export default function Dashboard() {
                 className={`cursor-pointer transition-all duration-200 hover:shadow-lg hover:scale-[1.02] ${
                   isSelected ? "ring-2 ring-blue-500 bg-blue-50" : ""
                 } ${isActive ? "ring-2 ring-green-500 bg-green-50" : ""}`}
-                onClick={() => !isScrapingActive && setSelectedAirport(airport)}
+                onClick={() =>
+                  !trackingStatus.isTracking && setSelectedAirport(airport)
+                }
               >
                 <CardHeader className="pb-3">
                   <div className="flex items-center justify-between">
@@ -243,28 +223,10 @@ export default function Dashboard() {
                 <CardContent>
                   <div className="space-y-2">
                     <div className="text-sm text-slate-600">
-                      <p>Lat: {airport.latitude.toFixed(4)}</p>
-                      <p>Lng: {airport.longitude.toFixed(4)}</p>
-                      <p>Bounds: </p>
+                      <p>Lat: {airport.lat.toFixed(4)}</p>
+                      <p>Lng: {airport.lon.toFixed(4)}</p>
+                      <p className="truncate">Bounds: {airport.bounds}</p>
                     </div>
-                    {stats && (
-                      <div className="pt-2 border-t border-slate-200">
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="text-slate-600">
-                            Data Tersimpan:
-                          </span>
-                          <span className="font-medium text-slate-900">
-                            {stats.totalFlights}
-                          </span>
-                        </div>
-                        {stats.lastUpdate && (
-                          <div className="flex items-center gap-1 text-xs text-slate-500 mt-1">
-                            <Clock className="w-3 h-3" />
-                            {new Date(stats.lastUpdate).toLocaleString("id-ID")}
-                          </div>
-                        )}
-                      </div>
-                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -272,7 +234,7 @@ export default function Dashboard() {
           })}
         </div>
 
-        {selectedAirport && !isScrapingActive && (
+        {selectedAirport && !trackingStatus.isTracking && (
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -287,26 +249,26 @@ export default function Dashboard() {
             <CardContent>
               <Button
                 onClick={handleStartScraping}
-                className="w-full h-12 bg-gradient-to-r from-emerald-600 to-blue-600 hover:from-emerald-700 hover:to-blue-700"
+                className="w-full h-12 bg-green-500 hover:black"
               >
                 <div className="flex items-center gap-2">
                   <Play className="w-4 h-4" />
-                  Mulai Scraping Berkelanjutan
+                  Mulai
                 </div>
               </Button>
             </CardContent>
           </Card>
         )}
 
-        {isScrapingActive && currentActiveAirport && (
+        {trackingStatus.isTracking && currentActiveAirportCode && (
           <Card className="border-red-200">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-red-700">
                 <Square className="w-5 h-5" />
-                Scraping Aktif - {currentActiveAirport}
+                Scraping Aktif - {currentActiveAirportCode}
               </CardTitle>
               <CardDescription>
-                Scraping sedang berjalan setiap 30 detik. Klik tombol dibawah
+                Sistem sedang memantau area koordinat. Klik tombol di bawah
                 untuk menghentikan.
               </CardDescription>
             </CardHeader>
@@ -325,9 +287,10 @@ export default function Dashboard() {
           </Card>
         )}
 
+        {/* STATS SUMMARY BOXES */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <Card className="h-28 flex justify-center">
-            <CardContent>
+            <CardContent className="p-6">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-blue-100 rounded-lg">
                   <MapPin className="w-5 h-5 text-blue-600" />
@@ -335,7 +298,7 @@ export default function Dashboard() {
                 <div>
                   <p className="text-sm text-slate-600">Total Bandara</p>
                   <p className="text-2xl font-bold text-slate-900">
-                    {airports.length}
+                    {summary.total_airports}
                   </p>
                 </div>
               </div>
@@ -349,9 +312,9 @@ export default function Dashboard() {
                   <BarChart className="w-5 h-5 text-emerald-600" />
                 </div>
                 <div>
-                  <p className="text-sm text-slate-600">Total Data</p>
+                  <p className="text-sm text-slate-600">Total Baris Data</p>
                   <p className="text-2xl font-bold text-slate-900">
-                    {scrapingService.getFlightsFromStorage().length}
+                    {summary.total_data_points}
                   </p>
                 </div>
               </div>
@@ -368,10 +331,12 @@ export default function Dashboard() {
                   <p className="text-sm text-slate-600">Status Scraping</p>
                   <p
                     className={`text-lg font-semibold ${
-                      isScrapingActive ? "text-green-600" : "text-slate-600"
+                      trackingStatus.isTracking
+                        ? "text-green-600"
+                        : "text-slate-600"
                     }`}
                   >
-                    {isScrapingActive ? "Aktif" : "Tidak Aktif"}
+                    {trackingStatus.isTracking ? "Aktif" : "Tidak Aktif"}
                   </p>
                 </div>
               </div>
@@ -387,7 +352,7 @@ export default function Dashboard() {
                 <div>
                   <p className="text-sm text-slate-600">Bandara Aktif</p>
                   <p className="text-lg font-semibold text-slate-900">
-                    {currentActiveAirport || "-"}
+                    {currentActiveAirportCode || "-"}
                   </p>
                 </div>
               </div>

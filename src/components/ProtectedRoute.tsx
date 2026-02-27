@@ -5,10 +5,11 @@ interface ProtectedRouteProps {
 }
 
 const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
+  // cek token
   const isAuthenticated = localStorage.getItem("isAuthenticated") === "true";
-
-  if (!isAuthenticated) {
-    return <Navigate to="/" replace />;
+  const token = localStorage.getItem("token");
+  if (!isAuthenticated || !token) {
+    return <Navigate to="/login" replace />;
   }
 
   return <>{children}</>;
