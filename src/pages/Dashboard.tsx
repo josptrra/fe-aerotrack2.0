@@ -9,6 +9,13 @@ import {
 import { Button } from "@/ui/button";
 import { Badge } from "@/ui/badge";
 import { Alert, AlertDescription } from "@/ui/alert";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/ui/dialog";
 import MainLayout from "@/components/Layout/MainLayout";
 import AddAirportDialog from "@/components/AddAirportDialog";
 import { airportService } from "@/services/airportService";
@@ -24,6 +31,7 @@ import {
   BarChart,
   AlertCircle,
   Clock,
+  Trash2,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { isAxiosError } from "axios";
@@ -31,6 +39,10 @@ import { isAxiosError } from "axios";
 export default function Dashboard() {
   const [airports, setAirports] = useState<Airport[]>([]);
   const [selectedAirport, setSelectedAirport] = useState<Airport | null>(null);
+  const [deleteTargetAirport, setDeleteTargetAirport] = useState<Airport | null>(
+    null,
+  );
+  const [isDeletingAirport, setIsDeletingAirport] = useState(false);
   const [trackingStatus, setTrackingStatus] = useState<TrackingStatus>({
     isTracking: false,
     activeBounds: "",
@@ -141,6 +153,50 @@ export default function Dashboard() {
 
   const currentActiveAirportCode = getActiveAirportName();
 
+  const handleConfirmDeleteAirport = async () => {
+    if (!deleteTargetAirport) return;
+    if (deleteTargetAirport.id == null) {
+      toast({
+        title: "Gagal Menghapus",
+        description: "ID bandara tidak ditemukan.",
+        variant: "destructive",
+      });
+      setDeleteTargetAirport(null);
+      return;
+    }
+
+    try {
+      setIsDeletingAirport(true);
+      await airportService.deleteAirport(deleteTargetAirport.id!);
+
+      setAirports((prev) =>
+        prev.filter((airport) => airport.id !== deleteTargetAirport.id),
+      );
+
+      if (selectedAirport?.id === deleteTargetAirport.id) {
+        setSelectedAirport(null);
+      }
+
+      toast({
+        title: "Bandara dihapus",
+        description: `Bandara ${deleteTargetAirport.name} berhasil dihapus.`,
+      });
+    } catch (error: unknown) {
+      const message =
+        isAxiosError(error) && error.response?.data?.error
+          ? String(error.response.data.error)
+          : "Terjadi kesalahan saat menghapus bandara";
+      toast({
+        title: "Gagal Menghapus",
+        description: message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsDeletingAirport(false);
+      setDeleteTargetAirport(null);
+    }
+  };
+
   return (
     <MainLayout>
       <div className="space-y-6">
@@ -214,7 +270,13 @@ export default function Dashboard() {
                       {isActive && (
                         <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
                       )}
-                      <MapPin className="w-4 h-4 text-slate-400" />
+                      <Trash2
+                        className="w-6 h-6 text-slate-400 hover:bg-red-500 p-1 hover:text-white rounded-full cursor-pointer"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDeleteTargetAirport(airport);
+                        }}
+                      />
                     </div>
                   </div>
                   <CardTitle className="text-lg">{airport.name}</CardTitle>
@@ -286,6 +348,42 @@ export default function Dashboard() {
             </CardContent>
           </Card>
         )}
+
+        <Dialog
+          open={!!deleteTargetAirport}
+          onOpenChange={(open) => {
+            if (!open) {
+              setDeleteTargetAirport(null);
+            }
+          }}
+        >
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Hapus Bandara</DialogTitle>
+              <DialogDescription>
+                {deleteTargetAirport
+                  ? `Apakah Anda yakin ingin menghapus bandara ${deleteTargetAirport.name} (${deleteTargetAirport.code})? Tindakan ini tidak dapat dibatalkan.`
+                  : "Apakah Anda yakin ingin menghapus bandara ini?"}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex justify-end gap-2 pt-4">
+              <Button
+                variant="outline"
+                onClick={() => setDeleteTargetAirport(null)}
+                disabled={isDeletingAirport}
+              >
+                Batal
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={handleConfirmDeleteAirport}
+                disabled={isDeletingAirport}
+              >
+                {isDeletingAirport ? "Menghapus..." : "Hapus"}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {/* STATS SUMMARY BOXES */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
