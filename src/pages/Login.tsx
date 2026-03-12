@@ -10,7 +10,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/ui/card";
-import { Plane, Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { isAxiosError } from "axios";
 import { authService } from "@/services/authService";
@@ -61,8 +61,12 @@ export default function Login() {
     <div className="min-h-screen bg-white flex items-center justify-center">
       <Card className="w-full max-w-md bg-white shadow-2xl border-0">
         <CardHeader className="text-center space-y-4">
-          <div className="mx-auto p-3 bg-gradient-to-r from-blue-600 to-emerald-600 rounded-full w-16 h-16 flex items-center justify-center">
-            <Plane className="w-8 h-8 text-white" />
+          <div className="mx-auto rounded-full w-16 h-16 flex items-center justify-center">
+            <img
+              src="/logo-bg.png"
+              alt="Aerotrack logo"
+              className="w-full h-full object-contain"
+            />
           </div>
           <CardTitle>Aerotrack</CardTitle>
           <CardTitle>Flight Tracker Indonesia</CardTitle>

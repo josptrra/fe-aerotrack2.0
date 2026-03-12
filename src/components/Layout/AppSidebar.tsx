@@ -1,11 +1,5 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import {
-  LayoutDashboard,
-  BarChart3,
-  Download,
-  LogOut,
-  Plane,
-} from "lucide-react";
+import { LayoutDashboard, BarChart3, Download, LogOut } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -53,8 +47,12 @@ export function AppSidebar() {
       <SidebarHeader className="border-b border-sidebar-border">
         <div className="flex items-center gap-2 px-4 py-4">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-gradient-to-r from-blue-600 to-emerald-600 rounded-lg">
-              <Plane className="w-5 h-5 text-white" />
+            <div className=" w-15 h-15 rounded-lg">
+              <img
+                src="/logo-nobg.png"
+                alt="Aerotrack logo"
+                className="w-full h-full object-contain"
+              />
             </div>
             <div>
               <h2 className="font-bold text-lg">Aerotrack</h2>
